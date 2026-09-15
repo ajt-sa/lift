@@ -70,7 +70,6 @@
 
   /* ---------- exercises ---------- */
   .ex{border-bottom:1px solid var(--line);padding:18px var(--pad) 14px}
-  .ex.opt .exn::after{content:" optional";color:var(--faint);font-weight:400;font-size:13px}
   .exn{font-weight:600;letter-spacing:-.01em;line-height:1.3}
   .exm{font-size:13px;color:var(--faint);margin-top:3px}
   .ex.done .exn,.ex.done .exm{color:var(--faint)}
@@ -167,6 +166,12 @@
   .cue li::before{content:"";position:absolute;left:4px;top:9px;width:5px;height:5px;
     border-radius:50%;background:var(--brass)}
   .hdr-row{display:flex;justify-content:space-between;align-items:baseline}
+  .cdset{flex-direction:column;align-items:stretch;gap:9px}
+  .cdhead{display:flex;align-items:center;justify-content:space-between}
+  .cdrow{display:flex;gap:8px}
+  .cdrow .fld{flex:1;min-width:0}
+  .cdrow .stp button{width:28px;height:32px;font-size:17px}
+  .cdrow .stp input{font-size:15px}
   .fgrp{margin-bottom:12px}
   .fgrp label{display:block;font-size:12px;color:var(--faint);margin-bottom:5px}
   .fgrp input{width:100%;background:var(--ink);color:var(--text);border:1px solid var(--line);
@@ -249,55 +254,60 @@
 <script>
 /* ============ PLAN DATA ============ */
 const PLANS = {
-A:{t:"Upper Push",s:"chest, shoulders, triceps",cardio:"15 min, start or finish",ex:[
- {n:"Dumbbell Bench Press",sets:3,reps:"8-10",w:10,u:"kg per hand",st:1},
- {n:"Seated Shoulder Press",sets:3,reps:"8-10",w:17.5,u:"kg machine, or 8 per hand",st:2.5},
- {n:"Incline DB Press or Machine Chest Press",sets:3,reps:"10-12",w:25,u:"kg machine, or 8 per hand",st:2.5},
- {n:"Cable Triceps Pushdown",sets:3,reps:"10-12",w:15,u:"kg stack, calibrate by feel",st:2.5},
- {n:"Overhead DB Triceps Extension",sets:3,reps:"12",w:8,u:"kg, one DB in both hands",st:1},
- {n:"Lateral Raises",sets:3,reps:"15",w:6,u:"kg, chest up, shoulders back",st:1},
- {n:"Cable Fly or Pec Deck",sets:3,reps:"12",w:10,u:"kg, start light",st:2.5,opt:1},
- {n:"Machine Abdominal Crunch",sets:3,reps:"12",w:25,u:"kg, lifted feet",st:2.5,opt:1}]},
+A:{t:"Upper Push",s:"chest, shoulders, triceps",
+ cardio:[{d:1.00,inc:0,sp:11.5},{d:0.50,inc:5,sp:6.5}],ex:[
+ {n:"M - Chest Press",sets:3,reps:"10-12",w:25,u:"machine kg",st:2.5},
+ {n:"M - Shoulder Press",sets:3,reps:"8-10",w:17.5,u:"machine kg",st:2.5},
+ {n:"M - Pec Deck",sets:3,reps:"12",w:10,u:"machine kg",st:2.5},
+ {n:"M - Abdominal Crunch",sets:3,reps:"12",w:25,u:"machine kg",st:2.5},
+ {n:"C - Triceps Pushdown",sets:3,reps:"10-12",w:15,u:"cable stack",st:2.5},
+ {n:"DB - Incline Bench Press",sets:3,reps:"8-10",w:10,u:"per hand",st:1},
+ {n:"DB - Overhead Triceps Extension",sets:3,reps:"12",w:8,u:"one dumbbell, both hands",st:1},
+ {n:"DB - Lateral Raise",sets:3,reps:"15",w:6,u:"per hand",st:1}]},
 
-B:{t:"Lower",s:"legs, hinge",cardio:"15 min, at the end only",ex:[
- {n:"Leg Press",sets:3,reps:"10-12",w:70,u:"kg, height 3.25, width 2.5",st:5},
- {n:"DB Romanian Deadlift",sets:3,reps:"8-10",w:10,u:"kg per hand, hinge at hips",st:1},
- {n:"DB Split Squat",sets:3,reps:"10 per leg",w:8,u:"kg per hand, hold here",st:1},
- {n:"Leg Curl",sets:3,reps:"12",w:37.5,u:"kg, s3/f3",st:2.5},
- {n:"Leg Extension",sets:3,reps:"12",w:37.5,u:"kg, s3/f3",st:2.5},
- {n:"Standing Calf Raise",sets:3,reps:"15",w:12,u:"kg, climbing to 16-20",st:2},
- {n:"DB Step-Ups",sets:3,reps:"10 per leg",w:6,u:"kg per hand, onto a bench",st:1,opt:1},
- {n:"DB Hip Thrust",sets:3,reps:"12",w:16,u:"kg across the hips",st:2,opt:1}]},
+B:{t:"Lower",s:"legs, hinge",
+ cardio:[{d:0.75,inc:10,sp:5.0}],ex:[
+ {n:"M - Leg Press",sets:3,reps:"10-12",w:70,u:"machine kg",st:5},
+ {n:"M - Single Leg Press",sets:3,reps:"10 per leg",w:35,u:"machine kg",st:2.5},
+ {n:"M - Leg Curl",sets:3,reps:"12",w:37.5,u:"machine kg",st:2.5},
+ {n:"M - Leg Extension",sets:3,reps:"12",w:37.5,u:"machine kg",st:2.5},
+ {n:"DB - Romanian Deadlift",sets:3,reps:"8-10",w:10,u:"per hand",st:1},
+ {n:"DB - Split Squat",sets:3,reps:"10 per leg",w:8,u:"per hand",st:1},
+ {n:"DB - Hip Thrust",sets:3,reps:"12",w:16,u:"one dumbbell",st:2},
+ {n:"DB - Calf Raise",sets:3,reps:"15",w:12,u:"per hand",st:2}]},
 
-C:{t:"Upper Pull",s:"back, biceps",cardio:"15 min rowing preferred",ex:[
- {n:"Assisted Pull-Ups",sets:3,reps:"8-10",w:45,u:"kg assist, reduce over time",st:2.5},
- {n:"DB Bent-Over Row or Chest-Supported Row",sets:3,reps:"8-10",w:10,u:"kg per hand",st:1},
- {n:"Lat Pull Down",sets:3,reps:"10-12",w:35,u:"kg",st:2.5},
- {n:"Face Pulls",sets:3,reps:"15",w:10,u:"kg stack, light by design",st:2.5},
- {n:"Hammer Curl",sets:3,reps:"10-12",w:10,u:"kg, try 10 this session",st:1},
- {n:"Concentration or Cable Curl",sets:3,reps:"12",w:8,u:"kg",st:1},
- {n:"Low Row",sets:3,reps:"12",w:35,u:"kg, chest up, hips still",st:2.5,opt:1},
- {n:"Shrugs or Reverse Fly",sets:3,reps:"15",w:12,u:"kg per hand, or 4-5 for flyes",st:2,opt:1}]},
+C:{t:"Upper Pull",s:"back, biceps",
+ cardio:[{d:1.00,inc:0,sp:11.5},{d:0.50,inc:5,sp:6.5}],ex:[
+ {n:"M - Assisted Pull-Ups",sets:3,reps:"8-10",w:45,u:"assist kg",st:2.5},
+ {n:"M - Lat Pull Down",sets:3,reps:"10-12",w:35,u:"machine kg",st:2.5},
+ {n:"M - Low Row",sets:3,reps:"12",w:35,u:"machine kg",st:2.5},
+ {n:"M - Reverse Fly",sets:3,reps:"15",w:10,u:"machine kg, pec deck reversed",st:2.5},
+ {n:"DB - Bent-Over Row",sets:3,reps:"8-10",w:10,u:"per hand",st:1},
+ {n:"DB - Hammer Curl",sets:3,reps:"10-12",w:10,u:"per hand",st:1},
+ {n:"DB - Concentration Curl",sets:3,reps:"12",w:8,u:"one dumbbell",st:1},
+ {n:"DB - Shrugs",sets:3,reps:"15",w:12,u:"per hand",st:2}]},
 
-D:{t:"Arms and Shoulders",s:"free weights",cardio:"20 min",ex:[
- {n:"Close-Grip DB Bench Press",sets:3,reps:"10",w:10,u:"kg per hand, elbows tucked",st:1},
- {n:"Squat to Overhead Press",sets:3,reps:"10",w:8,u:"kg, press is the limiter",st:1},
- {n:"Single-Arm DB Row",sets:3,reps:"10 per side",w:10,u:"kg, go to 12 when it feels easy",st:1},
- {n:"Close-Grip Curl",sets:3,reps:"12",w:10,u:"kg, lift with biceps not core",st:1},
- {n:"DB Skullcrusher",sets:3,reps:"12",w:6,u:"kg per hand, on a flat bench",st:1},
- {n:"Lateral Raises",sets:3,reps:"15",w:6,u:"kg",st:1},
- {n:"Preacher Curl",sets:3,reps:"12",w:6,u:"kg per hand, strict",st:1,opt:1},
- {n:"Cable Crunch",sets:3,reps:"15",w:20,u:"kg, kneeling, ribs to hips",st:2.5,opt:1}]},
+D:{t:"Arms and Shoulders",s:"free weights",
+ cardio:[{d:0.75,inc:10,sp:5.0}],ex:[
+ {n:"C - Cable Crunch",sets:3,reps:"15",w:20,u:"cable stack",st:2.5},
+ {n:"DB - Close-Grip Bench Press",sets:3,reps:"10",w:10,u:"per hand",st:1},
+ {n:"DB - Squat to Overhead Press",sets:3,reps:"10",w:8,u:"per hand",st:1},
+ {n:"DB - Single-Arm Row",sets:3,reps:"10 per side",w:10,u:"one dumbbell",st:1},
+ {n:"DB - Close-Grip Curl",sets:3,reps:"12",w:10,u:"per hand",st:1},
+ {n:"DB - Skullcrusher",sets:3,reps:"12",w:6,u:"per hand",st:1},
+ {n:"DB - Preacher Curl",sets:3,reps:"12",w:6,u:"per hand, or one arm at a time",st:1},
+ {n:"DB - Lateral Raise",sets:3,reps:"15",w:6,u:"per hand",st:1}]},
 
-E:{t:"Full Body",s:"light and high rep",cardio:"25-30 min steady, conversational",ex:[
- {n:"Goblet Squat or Leg Press",sets:3,reps:"15",w:12,u:"kg goblet, lighter than Plan B",st:2},
- {n:"Chest-Supported or Machine Row",sets:3,reps:"12",w:25,u:"kg",st:2.5},
- {n:"Machine Chest Press",sets:3,reps:"12-15",w:20,u:"kg, lighter than Plan A",st:2.5},
- {n:"DB Romanian Deadlift",sets:3,reps:"12",w:10,u:"kg per hand",st:1},
- {n:"Cable Curl",sets:3,reps:"15",w:15,u:"kg stack",st:2.5},
- {n:"Cable Pushdown",sets:3,reps:"15",w:12,u:"kg stack",st:2.5},
- {n:"DB Suitcase Hold",sets:3,reps:"40 sec per side",w:12,u:"kg, one DB, stand tall",st:2,opt:1},
- {n:"Machine Abdominal Crunch",sets:3,reps:"15",w:25,u:"kg",st:2.5,opt:1}]}
+E:{t:"Full Body",s:"light and high rep",
+ cardio:[{d:0.75,inc:10,sp:5.0}],ex:[
+ {n:"M - Leg Press",sets:3,reps:"15",w:50,u:"machine kg",st:5},
+ {n:"M - Row",sets:3,reps:"12",w:25,u:"machine kg",st:2.5},
+ {n:"M - Chest Press",sets:3,reps:"12-15",w:20,u:"machine kg",st:2.5},
+ {n:"M - Shoulder Press",sets:3,reps:"12",w:12.5,u:"machine kg",st:2.5},
+ {n:"M - Abdominal Crunch",sets:3,reps:"15",w:25,u:"machine kg",st:2.5},
+ {n:"DB - Romanian Deadlift",sets:3,reps:"12",w:10,u:"per hand",st:1},
+ {n:"DB - Curl",sets:3,reps:"15",w:8,u:"per hand",st:1},
+ {n:"DB - Overhead Triceps Extension",sets:3,reps:"15",w:6,u:"one dumbbell, both hands",st:1}]}
 };
 
 /* ============ STATE ============ */
@@ -316,6 +326,35 @@ function allEx(k){
 function vis(k){
   const h=(S.hidden&&S.hidden[k])||[];
   return ord(k).filter(i=>h.indexOf(i)<0);
+}
+function cdKey(k){return "Cardio ("+k+")";}
+function getCd(){
+  const A=S.active,def=PLANS[A.p].cardio;
+  if(!Array.isArray(A.cd)){
+    const pv=S.last[cdKey(A.p)];
+    A.cd=def.map((c,i)=>({d:pv&&pv.sets[i]?pv.sets[i].d:c.d,
+      inc:pv&&pv.sets[i]?pv.sets[i].inc:c.inc,
+      sp:pv&&pv.sets[i]?pv.sets[i].sp:c.sp,on:false}));
+  }
+  while(A.cd.length<def.length)A.cd.push(Object.assign({on:false},def[A.cd.length]));
+  if(A.cd.length>def.length)A.cd.length=def.length;
+  return A.cd;
+}
+function cbump(j,f,d){
+  const c=getCd()[j];
+  if(f==='d')c.d=Math.max(0,Math.round((c.d+d*0.05)*100)/100);
+  if(f==='inc')c.inc=Math.max(0,Math.min(25,c.inc+d));
+  if(f==='sp')c.sp=Math.max(0.5,Math.round((c.sp+d*0.5)*10)/10);
+  save();session();
+}
+function csetv(j,f,v){
+  const c=getCd()[j],n=parseFloat(v);
+  if(!isNaN(n)&&n>=0)c[f]=f==='inc'?Math.round(n):n;
+  save();session();
+}
+function ctog(j){
+  const c=getCd()[j];c.on=!c.on;save();session();
+  if(c.on&&navigator.vibrate)navigator.vibrate(12);
 }
 function getSt(i){
   const A=S.active,e=allEx(A.p)[i];
@@ -372,7 +411,7 @@ function reorderView(k,p){
     </div><div style="padding:18px var(--pad) 0">`;
   o.forEach((i,pos)=>{
     const e=p.ex[i];
-    h+=`<div class="ro"><div class="rn">${esc(e.n)}${e.opt?"<i> optional</i>":""}</div>
+    h+=`<div class="ro"><div class="rn">${esc(e.n)}</div>
       <button class="rb" onclick="move(${i},-1)"${pos===0?" disabled":""} aria-label="move up">&uarr;</button>
       <button class="rb" onclick="move(${i},1)"${pos===o.length-1?" disabled":""} aria-label="move down">&darr;</button>
     </div>`;
@@ -384,47 +423,43 @@ function reorderView(k,p){
 
 
 const CUES={
-"Dumbbell Bench Press":["Lie back with the dumbbells at chest height, wrists stacked over your elbows.","Press up and slightly together. Stop just short of locking out.","Keep your elbows at about 45 degrees to your body, not flared out to 90.","You should feel chest and front shoulder."],
-"Seated Shoulder Press":["Back flat against the pad, hands just outside shoulder width.","Press straight overhead until your arms are nearly straight.","Common error: arching your lower back to push harder. Keep your ribs down.","Shoulders and triceps."],
-"Incline DB Press or Machine Chest Press":["Set the bench to about 30 degrees. Steeper than that and it becomes a shoulder press.","Lower until you feel a stretch across the upper chest, then press.","Upper chest is the target."],
-"Cable Triceps Pushdown":["Pin your elbows to your sides. That is the whole exercise.","Only your forearms move. Push down to straight arms, control the way back up.","Common error: elbows drifting forward, which turns it into a row.","Back of the upper arm."],
-"Overhead DB Triceps Extension":["One dumbbell in both hands, arms straight overhead.","Lower it behind your head by bending only at the elbow.","Upper arms stay vertical and still throughout.","You should feel a stretch down the back of the arm."],
-"Lateral Raises":["Slight forward lean, small fixed bend in the elbows.","Raise out to the sides to shoulder height, no higher.","Lead with your elbows, not your hands. Lower over 2 to 3 seconds.","Side of the shoulder. If you feel your traps, you are shrugging."],
-"Cable Fly or Pec Deck":["Slight bend in the elbows and hold that angle for the whole set.","Bring the handles together in front of your chest, squeeze, then open slowly.","This is a stretch movement. Go light and control the return."],
-"Machine Abdominal Crunch":["Curl your ribs toward your hips rather than hinging forward at the waist.","Breathe out hard at the bottom of each rep.","Go slow on the way back. That is where most of the work is."],
+"M - Chest Press":["Handles at mid-chest height, head resting on the seat.","Press without locking out, control the return.","Chest and front shoulder."],
+"M - Shoulder Press":["Back flat against the pad, hands just outside shoulder width.","Press straight overhead until your arms are nearly straight.","Common error: arching your lower back to push harder. Keep your ribs down."],
+"M - Pec Deck":["Slight bend in the elbows, hold that angle the whole set.","Bring the pads together in front of your chest, squeeze, open slowly.","This is a stretch movement. Go light and control the return."],
+"M - Abdominal Crunch":["Curl your ribs toward your hips rather than hinging at the waist.","Breathe out hard at the bottom of each rep.","Go slow on the way back. That is where most of the work is."],
+"C - Triceps Pushdown":["Pin your elbows to your sides. That is the whole exercise.","Only your forearms move. Push to straight arms, control the way back up.","Common error: elbows drifting forward, which turns it into a row."],
+"DB - Incline Bench Press":["Set the bench to about 30 degrees. Steeper and it becomes a shoulder press.","Dumbbells at chest height, wrists stacked over your elbows.","Press up and slightly together, stopping short of lockout.","Elbows at about 45 degrees to your body, not flared to 90.","Upper chest is the target."],
+"DB - Overhead Triceps Extension":["One dumbbell in both hands, arms straight overhead.","Lower it behind your head by bending only at the elbow.","Upper arms stay vertical and still throughout."],
+"DB - Lateral Raise":["Slight forward lean, small fixed bend in the elbows.","Raise out to the sides to shoulder height, no higher.","Lead with your elbows, not your hands. Lower over 2 to 3 seconds.","If you feel your traps, you are shrugging."],
 
-"Leg Press":["Feet shoulder width, mid-platform, whole foot in contact.","Lower until your knees reach about 90 degrees.","Stop before your lower back lifts off the seat. Do not lock out at the top."],
-"DB Romanian Deadlift":["Dumbbells in front of your thighs. Soft knees, and keep that knee angle fixed.","Push your hips backwards and let the weights slide down your legs.","Stop at a strong hamstring stretch, usually mid-shin. Stand by driving the hips forward.","This is a hinge, not a squat. Back stays flat the whole time.","Hamstrings and glutes."],
-"DB Split Squat":["Long stride, back heel lifted, most of your weight on the front foot.","Drop straight down, back knee toward the floor.","Front shin stays roughly vertical. Do not push off the back foot.","Front quad and glute."],
-"Leg Curl":["Press your hips into the pad and do not let them lift.","Curl all the way to full contraction, pause, lower under control."],
-"Leg Extension":["Pause for a second at the top with the knee straight.","Lower slowly. Do not let the stack crash down."],
-"Standing Calf Raise":["Full range. Drop the heel as low as it goes, then rise all the way onto the toes.","Pause a beat at the top and again at the bottom.","No bouncing. Bouncing removes the entire exercise."],
-"DB Step-Ups":["Drive through the heel of the top foot.","Do not push off the bottom foot to help yourself up.","Step back down slowly instead of dropping."],
-"DB Hip Thrust":["Upper back on a bench, dumbbell across your hips.","Drive through your heels and squeeze the glutes hard at the top.","Chin tucked, ribs down. Look forward, not up."],
+"M - Leg Press":["Feet shoulder width, mid-platform, whole foot in contact.","Lower until your knees reach about 90 degrees.","Stop before your lower back lifts off the seat. Do not lock out at the top."],
+"M - Single Leg Press":["One foot centred on the platform, other foot resting on the floor.","Same depth and control as the two-legged version, about half the weight.","Keep your hips square. Do not let the working side rotate.","Replaces step-ups. Do it straight after your normal leg press sets."],
+"M - Leg Curl":["Press your hips into the pad and do not let them lift.","Curl to full contraction, pause, lower under control."],
+"M - Leg Extension":["Pause for a second at the top with the knee straight.","Lower slowly. Do not let the stack crash down."],
+"DB - Romanian Deadlift":["Dumbbells in front of your thighs. Soft knees, and keep that knee angle fixed.","Push your hips backwards and let the weights slide down your legs.","Stop at a strong hamstring stretch, usually mid-shin. Stand by driving the hips forward.","This is a hinge, not a squat. Back stays flat the whole time."],
+"DB - Split Squat":["Long stride, back heel lifted, most of your weight on the front foot.","Drop straight down, back knee toward the floor.","Front shin stays roughly vertical. Do not push off the back foot."],
+"DB - Hip Thrust":["Upper back on a bench, dumbbell across your hips.","Drive through your heels and squeeze the glutes hard at the top.","Chin tucked, ribs down. Look forward, not up."],
+"DB - Calf Raise":["Full range. Drop the heel as low as it goes, then rise all the way onto the toes.","Pause a beat at the top and again at the bottom.","No bouncing. Bouncing removes the entire exercise."],
 
-"Assisted Pull-Ups":["Grip slightly wider than your shoulders.","Start from a dead hang and pull your elbows down toward your ribs.","Think about pulling with your back, not your arms. Chest to the bar."],
-"DB Bent-Over Row or Chest-Supported Row":["Hinge at the hips to about 45 degrees with a flat back.","Pull the dumbbells toward your hip, elbows close to the body.","Common error: swinging the weight up with your lower back. If that happens, go lighter or switch to the chest-supported version."],
-"Lat Pull Down":["Lean back slightly, chest up.","Pull the bar to your upper chest, driving the shoulder blades down.","Control the way back up rather than letting it yank your arms straight."],
-"Face Pulls":["Set the cable at face height or just above.","Pull the rope toward your face, splitting your hands apart as you go.","Elbows stay high. Finish with your hands beside your ears.","Rear delts and upper back. Go light, this is not a strength movement."],
-"Hammer Curl":["Palms facing each other and keep them that way the whole rep.","Elbows at your sides, no swinging.","Lower over 2 to 3 seconds."],
-"Concentration or Cable Curl":["Brace your elbow against your inner thigh.","Curl slowly, squeeze at the top, full stretch at the bottom.","No body movement at all. This is the strictest curl there is."],
-"Low Row":["Chest up, back flat, hips still.","Pull to your stomach and squeeze the shoulder blades together.","Do not rock backwards to move the weight."],
-"Shrugs or Reverse Fly":["Shrugs: straight up and down, pause at the top, never roll the shoulders.","Reverse fly: hinge forward, small elbow bend, sweep the arms out and back."],
+"M - Assisted Pull-Ups":["Grip slightly wider than your shoulders.","Start from a dead hang and pull your elbows down toward your ribs.","Think about pulling with your back, not your arms. Chest to the bar."],
+"M - Lat Pull Down":["Lean back slightly, chest up.","Pull the bar to your upper chest, driving the shoulder blades down.","Control the way back up rather than letting it yank your arms straight."],
+"M - Low Row":["Chest up, back flat, hips still.","Pull to your stomach and squeeze the shoulder blades together.","Do not rock backwards to move the weight."],
+"M - Reverse Fly":["Most pec decks reverse for this. Chest against the pad, facing the machine.","Sweep your arms out and back with a small fixed elbow bend.","Squeeze the shoulder blades together at the end of each rep.","Rear delts and upper back. Go light, this is not a strength movement."],
+"DB - Bent-Over Row":["Hinge at the hips to about 45 degrees with a flat back.","Pull the dumbbells toward your hip, elbows close to the body.","Common error: swinging the weight up with your lower back. If that happens, go lighter."],
+"DB - Hammer Curl":["Palms facing each other and keep them that way the whole rep.","Elbows at your sides, no swinging.","Lower over 2 to 3 seconds."],
+"DB - Concentration Curl":["Brace your elbow against your inner thigh.","Curl slowly, squeeze at the top, full stretch at the bottom.","No body movement at all. This is the strictest curl there is."],
+"DB - Shrugs":["Straight up and down. Pause at the top.","Never roll the shoulders, that does nothing and irritates the joint.","Traps. Nothing else in your week trains these."],
 
-"Close-Grip DB Bench Press":["Dumbbells close together, palms facing each other.","Elbows tucked tight to your ribs for the whole rep.","Press up and focus on the triceps doing the work."],
-"Squat to Overhead Press":["Squat down with the weights at shoulder height.","Stand up and use that drive to press overhead in one motion.","Your shoulders set the weight here, not your legs."],
-"Single-Arm DB Row":["One knee and one hand on a bench, back flat.","Pull toward your hip, not your shoulder. Elbow close to the body.","Squeeze at the top, full stretch at the bottom.","Do not rotate your torso to help the weight up."],
-"Close-Grip Curl":["Hands close together, wrists neutral.","Elbows locked at your sides, no swinging.","Lift with your biceps, not your core."],
-"DB Skullcrusher":["Lying on a bench, arms straight up, palms facing each other.","Bend only at the elbow, lowering the weights toward your ears.","Upper arms stay still and vertical throughout."],
-"Preacher Curl":["Armpits over the top of the pad, upper arms flat against it.","Do not fully lock the elbow at the bottom. Keep the tension on.","Slow on the way down."],
-"Cable Crunch":["Kneel facing the stack with the rope beside your head.","Curl your ribs toward your hips, rounding your spine.","Your hips do not move. If they are hinging, your hip flexors are doing it, not your abs."],
+"C - Cable Crunch":["Kneel facing the stack with the rope beside your head.","Curl your ribs toward your hips, rounding your spine.","Your hips do not move. If they are hinging, your hip flexors are doing it, not your abs."],
+"DB - Close-Grip Bench Press":["Dumbbells close together, palms facing each other.","Elbows tucked tight to your ribs for the whole rep.","Press up and focus on the triceps doing the work."],
+"DB - Squat to Overhead Press":["Squat down with the weights at shoulder height.","Stand up and use that drive to press overhead in one motion.","Your shoulders set the weight here, not your legs."],
+"DB - Single-Arm Row":["One knee and one hand on a bench, back flat.","Pull toward your hip, not your shoulder. Elbow close to the body.","Squeeze at the top, full stretch at the bottom.","Do not rotate your torso to help the weight up."],
+"DB - Close-Grip Curl":["Hands close together, wrists neutral.","Elbows locked at your sides, no swinging.","Lift with your biceps, not your core."],
+"DB - Skullcrusher":["Lying on a bench, arms straight up, palms facing each other.","Bend only at the elbow, lowering the weights toward your ears.","Upper arms stay still and vertical throughout."],
+"DB - Preacher Curl":["Armpits over the top of the pad, upper arms flat against it.","Do not fully lock the elbow at the bottom. Keep the tension on.","One arm at a time is fine and often stricter."],
 
-"Goblet Squat or Leg Press":["Dumbbell held at chest height, elbows tucked in.","Sit down between your hips, chest tall.","Go as deep as you can before your lower back starts to round."],
-"Chest-Supported or Machine Row":["Chest against the pad, pull to your stomach.","Shoulder blades together at the end of every rep."],
-"Machine Chest Press":["Handles at mid-chest height, head resting on the seat.","Press without locking out, control the return."],
-"DB Suitcase Hold":["One dumbbell at your side, stand tall.","Do not lean away from it. Your job is to resist the tilt.","Works the obliques on the opposite side to the weight."],
-"Cable Curl":["Elbows at your sides, no swinging.","Squeeze at the top, control the stretch at the bottom."],
-"Cable Pushdown":["Elbows pinned to your sides.","Only the forearms move. Straight arms at the bottom."]
+"M - Row":["Chest against the pad, pull to your stomach.","Shoulder blades together at the end of every rep."],
+"DB - Curl":["Elbows at your sides, no swinging.","Squeeze at the top, control the stretch at the bottom."]
 };
 
 const TICK='<svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 7"/></svg>';
@@ -464,7 +499,7 @@ function home(){
 function start(k){
   if(S.active&&S.active.p!==k&&!confirm("You have an unfinished Plan "+S.active.p+". Discard it?"))return;
   if(!S.active||S.active.p!==k){
-    S.active={p:k,ts:Date.now(),cardio:false,ex:[],skip:[]};save();
+    S.active={p:k,ts:Date.now(),ex:[],cd:null,skip:[]};save();
   }
   session();
 }
@@ -473,7 +508,8 @@ function session(){
   const k=S.active.p,p=PLANS[k],A=S.active;
   if(RO){reorderView(k,p);return;}
   if(!A.skip)A.skip=[];
-  let total=1,done=A.cardio?1:0;
+  let total=0,done=0;
+  getCd().forEach(c=>{total++;if(c.on)done++;});
   vis(k).forEach(i=>{
     if(A.skip.indexOf(i)>=0)return;
     const st=getSt(i);if(st)st.sets.forEach(s=>{total++;if(s.on)done++;});
@@ -499,7 +535,7 @@ function session(){
       return;
     }
     const st=getSt(i),all=st.sets.every(s=>s.on),prev=S.last[e.n];
-    h+=`<div class="ex${e.opt?" opt":""}${all?" done":""}">
+    h+=`<div class="ex${all?" done":""}">
       <button class="exh" onclick="openCue(${i})">
         <div><div class="exn">${esc(e.n)}</div>
         <div class="exm">${e.sets} sets of ${esc(e.reps)}, ${esc(e.u)}</div></div>
@@ -523,12 +559,38 @@ function session(){
     h+=`</div></div>`;
   });
 
+  const CD=getCd(),cAll=CD.every(c=>c.on),cPrev=S.last[cdKey(k)];
+  h+=`<div class="ex${cAll?" done":""}"><div class="exn">Cardio</div>
+    <div class="exm">${CD.length} ${CD.length>1?"sets":"set"}, treadmill</div>`;
+  if(cPrev)h+=`<div class="prev">Last time <b>${cPrev.sets.map(c=>
+    c.d.toFixed(2)+"km at "+c.inc+"% at "+c.sp).join(", ")}</b></div>`;
+  h+=`<div class="sets">`;
+  CD.forEach((c,j)=>{
+    h+=`<div class="set cdset${c.on?" on":""}">
+      <div class="cdhead"><div class="sn">${j+1}</div>
+        <button class="tick" onclick="ctog(${j})" aria-label="mark done">${TICK}</button></div>
+      <div class="cdrow">
+        <div class="fld"><div class="fl">km</div><div class="stp">
+          <button onclick="cbump(${j},'d',-1)">&minus;</button>
+          <input type="number" inputmode="decimal" step="0.05" value="${c.d.toFixed(2)}"
+            onchange="csetv(${j},'d',this.value)">
+          <button onclick="cbump(${j},'d',1)">+</button></div></div>
+        <div class="fld"><div class="fl">incline %</div><div class="stp">
+          <button onclick="cbump(${j},'inc',-1)">&minus;</button>
+          <input type="number" inputmode="numeric" value="${c.inc}"
+            onchange="csetv(${j},'inc',this.value)">
+          <button onclick="cbump(${j},'inc',1)">+</button></div></div>
+        <div class="fld"><div class="fl">speed</div><div class="stp">
+          <button onclick="cbump(${j},'sp',-1)">&minus;</button>
+          <input type="number" inputmode="decimal" step="0.5" value="${c.sp.toFixed(1)}"
+            onchange="csetv(${j},'sp',this.value)">
+          <button onclick="cbump(${j},'sp',1)">+</button></div></div>
+      </div></div>`;
+  });
+  h+=`</div></div>`;
+
   h+=`<div class="ex" style="border:none"><button class="btn btn-s" style="width:100%"
     onclick="openAdd()">Add an exercise</button></div>`;
-
-  h+=`<div class="ex"><div class="cardio${A.cardio?" on":""}">
-    <div class="cm"><div class="ct">Cardio</div><div class="cs">${esc(p.cardio)}</div></div>
-    <button class="tick" onclick="togCardio()" aria-label="mark cardio done">${TICK}</button></div></div>`;
 
   h+=`<div class="foot">
     <button class="btn btn-p" onclick="finish()">${left?"Finish early":"Finish session"}</button>
@@ -552,7 +614,6 @@ function tog(i,j){
   s.on=!s.on;save();session();
   if(s.on){startRest();if(navigator.vibrate)navigator.vibrate(12);}
 }
-function togCardio(){S.active.cardio=!S.active.cardio;save();session();}
 
 function quit(){
   if(confirm("Discard this session? Nothing gets saved."))
@@ -569,8 +630,13 @@ function finish(){
       rec.ex.push({n:e.n,sets:done});rec.sets+=done.length;
     }
   });
-  if(!rec.sets&&!A.cardio){alert("Nothing ticked off yet. Tick at least one set first.");return;}
-  rec.cardio=A.cardio;
+  const cd=getCd().filter(c=>c.on).map(c=>({d:c.d,inc:c.inc,sp:c.sp}));
+  if(cd.length){
+    S.last[cdKey(A.p)]={sets:cd,ts:Date.now()};
+    rec.ex.push({n:cdKey(A.p),sets:cd});
+  }
+  rec.cardio=cd.length;
+  if(!rec.sets&&!cd.length){alert("Nothing ticked off yet. Tick at least one set first.");return;}
   S.hist.push(rec);S.active=null;save();stopRest();
   home();
   setTimeout(()=>alert("Saved. "+rec.sets+" sets logged.\nNext time you open Plan "+rec.p+
@@ -700,7 +766,7 @@ function openCue(i){
 }
 function watchDemo(){
   window.open("https://www.youtube.com/results?search_query="+
-    encodeURIComponent(CUE_N+" proper form technique"),"_blank");
+    encodeURIComponent(CUE_N.replace(/^(DB|M|C) - /,"")+" proper form technique"),"_blank");
 }
 function openHist(){
   const el=document.getElementById("histList");
@@ -710,7 +776,7 @@ function openHist(){
       const d=new Date(r.ts);
       return `<div class="hrow"><div class="hd">${d.getDate()} ${
         ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]}</div>
-        <div class="hp">${r.p}</div><div class="hs">${r.sets} sets${r.cardio?", cardio":""}</div>
+        <div class="hp">${r.p}</div><div class="hs">${r.sets} sets${r.cardio?", "+r.cardio+" cardio":""}</div>
         <button class="hx" onclick="delHist(${r.ts})" aria-label="delete">&times;</button></div>`;
     }).join("");
   }
