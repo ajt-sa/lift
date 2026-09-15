@@ -167,6 +167,13 @@
   .cue li::before{content:"";position:absolute;left:4px;top:9px;width:5px;height:5px;
     border-radius:50%;background:var(--brass)}
   .hdr-row{display:flex;justify-content:space-between;align-items:baseline}
+  .fgrp{margin-bottom:12px}
+  .fgrp label{display:block;font-size:12px;color:var(--faint);margin-bottom:5px}
+  .fgrp input{width:100%;background:var(--ink);color:var(--text);border:1px solid var(--line);
+    border-radius:9px;padding:11px 12px;font-size:16px;font-family:inherit}
+  .del{color:#D9694F}
+  .hrow .hx{color:var(--faint);font-size:20px;padding:0 4px 0 10px;flex:none;line-height:1}
+  .ro .rb[onclick^="unskip"]{width:auto;padding:0 14px;font-size:14px;color:var(--brass)}
   .ro{display:flex;align-items:center;gap:9px;background:var(--surface);
     border:1px solid var(--line);border-radius:11px;padding:11px 12px;margin-bottom:8px}
   .ro .rn{flex:1;font-weight:600;font-size:15px;letter-spacing:-.01em;line-height:1.3}
@@ -210,7 +217,27 @@
   <h2 id="cueName"></h2>
   <p id="cueMeta"></p>
   <ul class="cue" id="cueList"></ul>
-  <div class="row"><button class="btn btn-s" style="flex:1" onclick="watchDemo()">Watch a demo</button></div>
+  <div class="row">
+    <button class="btn btn-s" style="flex:1" onclick="watchDemo()">Watch a demo</button>
+    <button class="btn btn-s" style="flex:1" onclick="skipToday()">Skip today</button>
+  </div>
+  <div class="row"><button class="btn btn-s" style="flex:1" onclick="openEdit()">Replace or edit</button></div>
+</div>
+
+<div class="sheet" id="sheetEdit">
+  <h2 id="edTitle">Edit exercise</h2>
+  <p id="edSub">Changes stick for every future session of this plan.</p>
+  <div class="fgrp"><label>Name</label><input id="edN" type="text" autocapitalize="words"></div>
+  <div class="fgrp"><label>Sets</label><input id="edS" type="number" inputmode="numeric"></div>
+  <div class="fgrp"><label>Reps</label><input id="edR" type="text" placeholder="8-10"></div>
+  <div class="fgrp"><label>Starting weight</label><input id="edW" type="number" inputmode="decimal"></div>
+  <div class="fgrp"><label>Note under the name</label><input id="edU" type="text" placeholder="kg per hand"></div>
+  <div class="row">
+    <button class="btn btn-p" style="flex:1" onclick="saveEdit()">Save</button>
+    <button class="btn btn-s" onclick="closeSheets()">Cancel</button>
+  </div>
+  <div class="row" id="edDelRow"><button class="btn btn-s del" style="flex:1"
+    onclick="removeEx()">Remove from this plan</button></div>
 </div>
 
 <div class="sheet" id="sheetHist">
@@ -275,14 +302,37 @@ E:{t:"Full Body",s:"light and high rep",cardio:"25-30 min steady, conversational
 
 /* ============ STATE ============ */
 const KEY="lift.v1";
-let S={last:{},hist:[],active:null,rest:90,order:{}};
+let S={last:{},hist:[],active:null,rest:90,order:{},custom:{},hidden:{},extra:{}};
 let RO=false;
 try{const r=localStorage.getItem(KEY);if(r)S=Object.assign(S,JSON.parse(r));}catch(e){}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){
   alert("Couldn't save. Your browser may be blocking local storage in private mode.");}}
 
+function allEx(k){
+  const base=PLANS[k].ex.concat((S.extra&&S.extra[k])||[]);
+  const cu=(S.custom&&S.custom[k])||{};
+  return base.map((e,i)=>cu[i]?Object.assign({},e,cu[i]):e);
+}
+function vis(k){
+  const h=(S.hidden&&S.hidden[k])||[];
+  return ord(k).filter(i=>h.indexOf(i)<0);
+}
+function getSt(i){
+  const A=S.active,e=allEx(A.p)[i];
+  if(!e)return null;
+  if(!A.ex[i]){
+    const pv=S.last[e.n];
+    A.ex[i]={sets:Array.from({length:e.sets},(_,j)=>({
+      w:pv&&pv.sets[j]?pv.sets[j].w:e.w,
+      r:pv&&pv.sets[j]?pv.sets[j].r:parseInt(e.reps)||10,on:false}))};
+  }
+  const st=A.ex[i];
+  while(st.sets.length<e.sets)st.sets.push({w:e.w,r:parseInt(e.reps)||10,on:false});
+  if(st.sets.length>e.sets)st.sets.length=e.sets;
+  return st;
+}
 function ord(k){
-  const n=PLANS[k].ex.length;
+  const n=allEx(k).length;
   let o=S.order&&S.order[k];
   if(!Array.isArray(o)||o.length!==n||new Set(o).size!==n||o.some(i=>i<0||i>=n))
     o=Array.from({length:n},(_,i)=>i);
@@ -290,6 +340,12 @@ function ord(k){
 }
 function reorder(){RO=true;session();}
 function reorderDone(){RO=false;save();session();}
+function rebuildLast(){
+  S.last={};
+  S.hist.slice().sort((a,b)=>a.ts-b.ts).forEach(r=>{
+    (r.ex||[]).forEach(x=>{S.last[x.n]={sets:x.sets,ts:r.ts};});
+  });
+}
 function move(i,d){
   const k=S.active.p,o=ord(k).slice(),pos=o.indexOf(i),np=pos+d;
   if(np<0||np>=o.length)return;
@@ -299,7 +355,10 @@ function move(i,d){
   if(navigator.vibrate)navigator.vibrate(8);
 }
 function resetOrder(){
-  if(S.order)delete S.order[S.active.p];
+  const k=S.active.p;
+  if(S.order)delete S.order[k];
+  if(S.hidden)delete S.hidden[k];
+  if(S.custom)delete S.custom[k];
   save();session();
 }
 function reorderView(k,p){
@@ -405,15 +464,7 @@ function home(){
 function start(k){
   if(S.active&&S.active.p!==k&&!confirm("You have an unfinished Plan "+S.active.p+". Discard it?"))return;
   if(!S.active||S.active.p!==k){
-    const p=PLANS[k],d={p:k,ts:Date.now(),cardio:false,ex:[]};
-    p.ex.forEach(e=>{
-      const prev=S.last[e.n];
-      d.ex.push({sets:Array.from({length:e.sets},(_,i)=>({
-        w:prev&&prev.sets[i]?prev.sets[i].w:e.w,
-        r:prev&&prev.sets[i]?prev.sets[i].r:parseInt(e.reps)||10,
-        on:false}))});
-    });
-    S.active=d;save();
+    S.active={p:k,ts:Date.now(),cardio:false,ex:[],skip:[]};save();
   }
   session();
 }
@@ -421,8 +472,12 @@ function start(k){
 function session(){
   const k=S.active.p,p=PLANS[k],A=S.active;
   if(RO){reorderView(k,p);return;}
+  if(!A.skip)A.skip=[];
   let total=1,done=A.cardio?1:0;
-  A.ex.forEach(x=>x.sets.forEach(s=>{total++;if(s.on)done++;}));
+  vis(k).forEach(i=>{
+    if(A.skip.indexOf(i)>=0)return;
+    const st=getSt(i);if(st)st.sets.forEach(s=>{total++;if(s.on)done++;});
+  });
   const left=total-done;
 
   let h=`<div class="top"><div class="hdr-row">
@@ -434,8 +489,16 @@ function session(){
     <div class="left-l">${left===1?"thing":"things"} left</div></div>
     <div class="bar"><i style="width:${total?done/total*100:0}%"></i></div></div>`;
 
-  ord(k).forEach(i=>{
-    const e=p.ex[i],st=A.ex[i],all=st.sets.every(s=>s.on),prev=S.last[e.n];
+  const EX=allEx(k);
+  vis(k).forEach(i=>{
+    const e=EX[i];
+    if(A.skip.indexOf(i)>=0){
+      h+=`<div class="ex"><div class="ro" style="margin:0;opacity:.45">
+        <div class="rn">${esc(e.n)}<i> skipped today</i></div>
+        <button class="rb" onclick="unskip(${i})">undo</button></div></div>`;
+      return;
+    }
+    const st=getSt(i),all=st.sets.every(s=>s.on),prev=S.last[e.n];
     h+=`<div class="ex${e.opt?" opt":""}${all?" done":""}">
       <button class="exh" onclick="openCue(${i})">
         <div><div class="exn">${esc(e.n)}</div>
@@ -459,6 +522,9 @@ function session(){
     });
     h+=`</div></div>`;
   });
+
+  h+=`<div class="ex" style="border:none"><button class="btn btn-s" style="width:100%"
+    onclick="openAdd()">Add an exercise</button></div>`;
 
   h+=`<div class="ex"><div class="cardio${A.cardio?" on":""}">
     <div class="cm"><div class="ct">Cardio</div><div class="cs">${esc(p.cardio)}</div></div>
@@ -494,8 +560,9 @@ function quit(){
 }
 
 function finish(){
-  const A=S.active,p=PLANS[A.p],rec={p:A.p,ts:Date.now(),sets:0,ex:[]};
-  p.ex.forEach((e,i)=>{
+  const A=S.active,rec={p:A.p,ts:Date.now(),sets:0,ex:[]};
+  allEx(A.p).forEach((e,i)=>{
+    if(!A.ex[i])return;
     const done=A.ex[i].sets.filter(s=>s.on).map(s=>({w:s.w,r:s.r}));
     if(done.length){
       S.last[e.n]={sets:done,ts:Date.now()};
@@ -552,14 +619,77 @@ function doImport(){
   try{
     const d=JSON.parse(t);
     if(!d||typeof d!=="object"||!("last" in d)) throw 0;
-    S=Object.assign({last:{},hist:[],active:null,rest:90,order:{}},d);
+    S=Object.assign({last:{},hist:[],active:null,rest:90,order:{},custom:{},hidden:{},extra:{}},d);
     save();closeSheets();home();
     alert("Restored. "+(S.hist?S.hist.length:0)+" sessions loaded.");
   }catch(e){alert("That didn't look like a backup. Check you copied the whole thing.");}
 }
-let CUE_N="";
+let CUE_N="",CUE_I=-1,ADD=false;
+function skipToday(){
+  const A=S.active;if(!A.skip)A.skip=[];
+  if(A.skip.indexOf(CUE_I)<0)A.skip.push(CUE_I);
+  save();closeSheets();session();
+}
+function unskip(i){
+  const A=S.active;A.skip=(A.skip||[]).filter(x=>x!==i);save();session();
+}
+function openEdit(){
+  ADD=false;
+  const e=allEx(S.active.p)[CUE_I];
+  document.getElementById("edTitle").textContent="Edit exercise";
+  document.getElementById("edSub").textContent="Changes stick for every future session of this plan.";
+  document.getElementById("edDelRow").style.display="";
+  document.getElementById("edN").value=e.n;
+  document.getElementById("edS").value=e.sets;
+  document.getElementById("edR").value=e.reps;
+  document.getElementById("edW").value=e.w;
+  document.getElementById("edU").value=e.u;
+  closeSheets();openSheet("sheetEdit");
+}
+function openAdd(){
+  ADD=true;
+  document.getElementById("edTitle").textContent="Add an exercise";
+  document.getElementById("edSub").textContent="It gets added to the end of this plan for good.";
+  document.getElementById("edDelRow").style.display="none";
+  document.getElementById("edN").value="";
+  document.getElementById("edS").value=3;
+  document.getElementById("edR").value="10";
+  document.getElementById("edW").value=10;
+  document.getElementById("edU").value="kg";
+  openSheet("sheetEdit");
+}
+function saveEdit(){
+  const k=S.active.p;
+  const n=document.getElementById("edN").value.trim();
+  if(!n){alert("Give it a name first.");return;}
+  const o={n:n,
+    sets:Math.max(1,Math.min(10,parseInt(document.getElementById("edS").value)||3)),
+    reps:document.getElementById("edR").value.trim()||"10",
+    w:Math.max(0,parseFloat(document.getElementById("edW").value)||0),
+    u:document.getElementById("edU").value.trim()};
+  if(ADD){
+    if(!S.extra)S.extra={};
+    if(!S.extra[k])S.extra[k]=[];
+    S.extra[k].push(Object.assign({st:1},o));
+    if(S.order)delete S.order[k];
+  }else{
+    if(!S.custom)S.custom={};
+    if(!S.custom[k])S.custom[k]={};
+    S.custom[k][CUE_I]=o;
+    if(S.active.ex[CUE_I])delete S.active.ex[CUE_I];
+  }
+  save();closeSheets();session();
+}
+function removeEx(){
+  if(!confirm("Remove this from Plan "+S.active.p+"? You can put it back with Reset order.")) return;
+  const k=S.active.p;
+  if(!S.hidden)S.hidden={};
+  if(!S.hidden[k])S.hidden[k]=[];
+  if(S.hidden[k].indexOf(CUE_I)<0)S.hidden[k].push(CUE_I);
+  save();closeSheets();session();
+}
 function openCue(i){
-  const e=PLANS[S.active.p].ex[i];CUE_N=e.n;
+  const e=allEx(S.active.p)[i];CUE_N=e.n;CUE_I=i;
   document.getElementById("cueName").textContent=e.n;
   document.getElementById("cueMeta").textContent=e.sets+" sets of "+e.reps+", "+e.u;
   const c=CUES[e.n];
@@ -580,10 +710,16 @@ function openHist(){
       const d=new Date(r.ts);
       return `<div class="hrow"><div class="hd">${d.getDate()} ${
         ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]}</div>
-        <div class="hp">${r.p}</div><div class="hs">${r.sets} sets${r.cardio?", cardio":""}</div></div>`;
+        <div class="hp">${r.p}</div><div class="hs">${r.sets} sets${r.cardio?", cardio":""}</div>
+        <button class="hx" onclick="delHist(${r.ts})" aria-label="delete">&times;</button></div>`;
     }).join("");
   }
   openSheet("sheetHist");
+}
+function delHist(ts){
+  if(!confirm("Delete this session?\n\nYour saved weights get recalculated from whatever sessions are left."))return;
+  S.hist=S.hist.filter(r=>r.ts!==ts);
+  rebuildLast();save();openHist();
 }
 
 /* ============ BOOT ============ */
