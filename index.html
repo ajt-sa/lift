@@ -67,6 +67,24 @@
   .plan .ps{font-size:13px;color:var(--faint);margin-top:2px}
   .plan .pl{font-size:13px;color:var(--dim);white-space:nowrap}
   .resume{border-color:var(--brass);background:linear-gradient(var(--brass-soft),var(--brass-soft)),var(--surface)}
+  .plan .pg{font-size:12px;color:var(--brass);font-weight:700;white-space:nowrap}
+
+  /* ---------- rolling 7 days ---------- */
+  .roll{margin:20px var(--pad) 0;background:var(--surface);border:1px solid var(--line);
+    border-radius:14px;padding:13px 16px}
+  .roll .rh{font-size:13px;color:var(--dim)}
+  .roll .rh b{color:var(--text);font-weight:700}
+  .roll .rd{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+  .roll .rc{font-size:12px;color:var(--dim);background:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:4px 9px}
+  .roll .rc b{color:var(--brass);font-weight:700;margin-left:5px}
+  .roll .rz{font-size:12px;color:var(--faint);margin-top:9px}
+
+  /* ---------- other plans, in the cue sheet ---------- */
+  .oth{margin:15px 0 3px;border-top:1px solid var(--line);padding-top:13px}
+  .oth .ol{font-size:12px;color:var(--faint);margin-bottom:8px}
+  .oth .or{font-size:13px;color:var(--dim);margin-top:6px}
+  .oth .or b{color:var(--brass);font-weight:700;margin-right:7px}
 
   /* ---------- exercises ---------- */
   .ex{border-bottom:1px solid var(--line);padding:18px var(--pad) 14px}
@@ -129,7 +147,7 @@
   /* ---------- rest timer ---------- */
   .rest{
     position:fixed;left:var(--pad);right:var(--pad);
-    bottom:calc(84px + env(safe-area-inset-bottom));z-index:29;
+    top:calc(84px + env(safe-area-inset-top));z-index:26;
     background:var(--lift);border:1px solid var(--brass);border-radius:12px;
     padding:11px 14px;display:none;align-items:center;gap:12px;
     box-shadow:0 8px 28px rgba(0,0,0,.45);
@@ -213,23 +231,25 @@
 
 <div class="sheet" id="sheetBackup">
   <h2>Backup</h2>
-  <p>Copy this text somewhere safe. Paste it back here on a new phone or if your data ever disappears.</p>
+  <p>Save it as a file, or copy the text. Either one restores everything on a new phone.</p>
   <textarea id="backupBox" readonly></textarea>
   <div class="row">
-    <button class="btn btn-p" onclick="copyBackup()" id="copyBtn">Copy</button>
-    <button class="btn btn-s" onclick="doImport()">Paste and restore</button>
+    <button class="btn btn-p" onclick="shareBackup()" id="saveBtn">Save as file</button>
+    <button class="btn btn-s" onclick="copyBackup()" id="copyBtn">Copy</button>
   </div>
+  <div class="row"><button class="btn btn-s" style="flex:1" onclick="doImport()">Paste and restore</button></div>
 </div>
 
 <div class="sheet" id="sheetCue">
   <h2 id="cueName"></h2>
   <p id="cueMeta"></p>
   <ul class="cue" id="cueList"></ul>
+  <div id="cueOther"></div>
   <div class="row">
-    <button class="btn btn-s" style="flex:1" onclick="watchDemo()">Watch a demo</button>
+    <button class="btn btn-s" style="flex:1" id="cueDemo" onclick="watchDemo()">Watch a demo</button>
     <button class="btn btn-s" style="flex:1" onclick="skipToday()">Skip today</button>
   </div>
-  <div class="row"><button class="btn btn-s" style="flex:1" onclick="openEdit()">Replace or edit</button></div>
+  <div class="row" id="cueEditRow"><button class="btn btn-s" style="flex:1" onclick="openEdit()">Replace or edit</button></div>
 </div>
 
 <div class="sheet" id="sheetEdit">
@@ -356,6 +376,9 @@ function vis(k){
   return ord(k).filter(i=>h.indexOf(i)<0);
 }
 function cdKey(k){return "Cardio ("+k+")";}
+/* Cardio sits outside the exercise list, so it borrows index -1 to use the
+   same skip machinery. No real exercise can ever hold that index. */
+const CD_I=-1;
 /* Saved weights are keyed by plan AND exercise name, so the same movement in
    two plans keeps its own history. "A|M - Chest Press" is a different slot
    from "E|M - Chest Press". */
@@ -426,37 +449,53 @@ function migrate(){
   rebuildLast();
   S.v=2;save();
 }
+/* The order array covers every exercise in the plan, including ones removed
+   from it. Moving past a removed exercise would swap two things you cannot
+   see and look like nothing happened, so the arrows step over them. */
 function move(i,d){
-  const k=S.active.p,o=ord(k).slice(),pos=o.indexOf(i),np=pos+d;
+  const k=S.active.p,o=ord(k).slice(),hid=(S.hidden&&S.hidden[k])||[];
+  const pos=o.indexOf(i);
+  if(pos<0)return;
+  let np=pos+d;
+  while(np>=0&&np<o.length&&hid.indexOf(o[np])>=0)np+=d;
   if(np<0||np>=o.length)return;
   const t=o[pos];o[pos]=o[np];o[np]=t;
   if(!S.order)S.order={};
   S.order[k]=o;save();session();
-  if(navigator.vibrate)navigator.vibrate(8);
 }
 function resetOrder(){
   const k=S.active.p;
+  if(!confirm("Put Plan "+k+" back in its original order?\n\nYour renames, weight edits and removed exercises are left alone."))return;
+  if(S.order)delete S.order[k];
+  save();session();
+}
+function undoAll(){
+  const k=S.active.p;
+  if(!confirm("Undo every change to Plan "+k+"?\n\nOriginal order, removed exercises back, renames and weight edits reversed. Exercises you added stay, and nothing in your history is touched."))return;
   if(S.order)delete S.order[k];
   if(S.hidden)delete S.hidden[k];
   if(S.custom)delete S.custom[k];
   save();session();
 }
 function reorderView(k,p){
-  const o=ord(k);
+  const o=ord(k),EX=allEx(k),hid=(S.hidden&&S.hidden[k])||[];
+  const items=o.filter(i=>hid.indexOf(i)<0&&EX[i]);
   let h=`<div class="top"><div class="hdr-row">
-    <button class="back" onclick="reorderDone()">Done</button>
-    <button class="back" onclick="resetOrder()">Reset order</button></div>
+    <button class="back" onclick="reorderDone()">Done</button></div>
     <div class="top-row"><div class="plan-letter">${k}</div>
     <div class="plan-name">Reorder</div></div>
     <div class="left"><div class="left-l">Match your gym's layout. This sticks for every future Plan ${k}.</div></div>
     </div><div style="padding:18px var(--pad) 0">`;
-  o.forEach((i,pos)=>{
-    const e=p.ex[i];
+  items.forEach((i,pos)=>{
+    const e=EX[i];
     h+=`<div class="ro"><div class="rn">${esc(e.n)}</div>
       <button class="rb" onclick="move(${i},-1)"${pos===0?" disabled":""} aria-label="move up">&uarr;</button>
-      <button class="rb" onclick="move(${i},1)"${pos===o.length-1?" disabled":""} aria-label="move down">&darr;</button>
+      <button class="rb" onclick="move(${i},1)"${pos===items.length-1?" disabled":""} aria-label="move down">&darr;</button>
     </div>`;
   });
+  h+=`<div style="display:flex;gap:10px;margin-top:20px">
+    <button class="btn btn-s" style="flex:1" onclick="resetOrder()">Reset order</button>
+    <button class="btn btn-s" style="flex:1" onclick="undoAll()">Undo all changes</button></div>`;
   h+=`</div><div class="foot"><button class="btn btn-p" onclick="reorderDone()">Done</button></div>`;
   document.getElementById("app").innerHTML=h;
   window.scrollTo(0,0);
@@ -500,7 +539,11 @@ const CUES={
 "DB - Preacher Curl":["Armpits over the top of the pad, upper arms flat against it.","Do not fully lock the elbow at the bottom. Keep the tension on.","One arm at a time is fine and often stricter."],
 
 "M - Row":["Chest against the pad, pull to your stomach.","Shoulder blades together at the end of every rep."],
-"DB - Curl":["Elbows at your sides, no swinging.","Squeeze at the top, control the stretch at the bottom."]
+"DB - Curl":["Elbows at your sides, no swinging.","Squeeze at the top, control the stretch at the bottom."],
+"Cardio":["Incline is the dial, not speed. Raise the gradient before you raise the pace.",
+  "Let go of the handrails. Holding on cuts the work by a fifth or more, so drop the speed instead and walk unsupported.",
+  "Walk tall with your shoulders back and let your arms swing.",
+  "If your heart rate sits under 150, add a percent of incline rather than going faster."]
 };
 
 const TICK='<svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5.2L20 7"/></svg>';
@@ -518,16 +561,35 @@ function lastDone(p){
   return null;
 }
 
+/* Sessions in the last seven days, today included. Counted in whole local
+   days, so the number holds steady from when you wake up until midnight
+   rather than sliding away hour by hour. */
+const DAYS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+function rolling7(){
+  const n=new Date();
+  const cut=new Date(n.getFullYear(),n.getMonth(),n.getDate()-6).getTime();
+  return S.hist.filter(r=>r.ts>=cut).slice().sort((a,b)=>a.ts-b.ts)
+    .map(r=>({p:r.p,d:DAYS[new Date(r.ts).getDay()]}));
+}
+
 /* ============ HOME ============ */
 function home(){
-  S.active=null;RO=false;save();
-  let h=`<div class="home-head"><h1>Lift</h1><p>Pick today's session.</p></div><div class="plans">`;
+  RO=false;releaseWake();save();
+  const act=(S.active&&PLANS[S.active.p])?S.active.p:null;
+  const r7=rolling7();
+  let h=`<div class="home-head"><h1>Lift</h1><p>Pick today's session.</p></div>
+    <div class="roll"><div class="rh">Last 7 days &middot; <b>${r7.length} session${
+      r7.length===1?"":"s"}</b></div>`;
+  h+= r7.length
+    ? `<div class="rd">${r7.map(x=>`<span class="rc">${x.d}<b>${x.p}</b></span>`).join("")}</div>`
+    : `<div class="rz">Nothing logged in the last seven days.</div>`;
+  h+=`</div><div class="plans">`;
   for(const k in PLANS){
-    const p=PLANS[k];
-    h+=`<button class="plan" onclick="start('${k}')">
+    const p=PLANS[k],on=act===k;
+    h+=`<button class="plan${on?" resume":""}" onclick="start('${k}')">
       <b>${k}</b><div class="pm"><div class="pt">${esc(p.t)}</div>
       <div class="ps">${esc(p.s)}</div></div>
-      <div class="pl">${ago(lastDone(k))}</div></button>`;
+      <div class="${on?"pg":"pl"}">${on?"in progress":ago(lastDone(k))}</div></button>`;
   }
   h+=`</div><div class="foot">
     <button class="btn btn-p" onclick="openHist()">History</button>
@@ -550,7 +612,8 @@ function session(){
   if(RO){reorderView(k,p);return;}
   if(!A.skip)A.skip=[];
   let total=0,done=0;
-  getCd().forEach(c=>{total++;if(c.on)done++;});
+  const cdSkip=A.skip.indexOf(CD_I)>=0;
+  if(!cdSkip)getCd().forEach(c=>{total++;if(c.on)done++;});
   vis(k).forEach(i=>{
     if(A.skip.indexOf(i)>=0)return;
     const st=getSt(i);if(st)st.sets.forEach(s=>{total++;if(s.on)done++;});
@@ -600,9 +663,21 @@ function session(){
     h+=`</div></div>`;
   });
 
+  if(cdSkip){
+    h+=`<div class="ex"><div class="ro" style="margin:0;opacity:.45">
+      <div class="rn">Cardio<i> skipped today</i></div>
+      <button class="rb" onclick="unskip(${CD_I})">undo</button></div></div>`;
+    h+=cdTail(left);
+    document.getElementById("app").innerHTML=h;
+    if(rT)restTop();
+    acquireWake();return;
+  }
   const CD=getCd(),cAll=CD.every(c=>c.on),cPrev=S.last[lk(k,cdKey(k))];
-  h+=`<div class="ex${cAll?" done":""}"><div class="exn">Cardio</div>
-    <div class="exm">${CD.length} ${CD.length>1?"sets":"set"}, treadmill</div>`;
+  h+=`<div class="ex${cAll?" done":""}">
+    <button class="exh" onclick="openCue(${CD_I})">
+      <div><div class="exn">Cardio</div>
+      <div class="exm">${CD.length} ${CD.length>1?"sets":"set"}, treadmill</div></div>
+      <div class="exq">?</div></button>`;
   if(cPrev)h+=`<div class="prev">Last time <b>${cPrev.sets.map(c=>
     c.d.toFixed(2)+"km at "+c.inc+"% at "+c.sp).join(", ")}</b></div>`;
   h+=`<div class="sets">`;
@@ -629,14 +704,17 @@ function session(){
       </div></div>`;
   });
   h+=`</div></div>`;
-
-  h+=`<div class="ex" style="border:none"><button class="btn btn-s" style="width:100%"
-    onclick="openAdd()">Add an exercise</button></div>`;
-
-  h+=`<div class="foot">
+  h+=cdTail(left);
+  document.getElementById("app").innerHTML=h;
+  if(rT)restTop();
+  acquireWake();
+}
+function cdTail(left){
+  return `<div class="ex" style="border:none"><button class="btn btn-s" style="width:100%"
+    onclick="openAdd()">Add an exercise</button></div>
+    <div class="foot">
     <button class="btn btn-p" onclick="finish()">${left?"Finish early":"Finish session"}</button>
     <button class="btn btn-s" onclick="quit()">Discard</button></div>`;
-  document.getElementById("app").innerHTML=h;
 }
 
 function bump(i,j,f,d){
@@ -671,7 +749,8 @@ function finish(){
       rec.ex.push({n:e.n,sets:done});rec.sets+=done.length;
     }
   });
-  const cd=getCd().filter(c=>c.on).map(c=>({d:c.d,inc:c.inc,sp:c.sp}));
+  const cd=((A.skip||[]).indexOf(CD_I)>=0)?[]
+    :getCd().filter(c=>c.on).map(c=>({d:c.d,inc:c.inc,sp:c.sp}));
   if(cd.length){
     S.last[lk(A.p,cdKey(A.p))]={sets:cd,ts:Date.now()};
     rec.ex.push({n:cdKey(A.p),sets:cd});
@@ -783,11 +862,50 @@ function copyReview(){
     (ok||navigator.clipboard)?"Copied, now paste into Claude":"Copy failed, try again";
 }
 
+/* ============ SCREEN WAKE ============ */
+/* Keeps the display lit for the whole session so the rest timer stays
+   readable from the machine. iOS drops the lock whenever the page is
+   hidden, so it gets taken again on the way back. */
+let WL=null,WLwant=false;
+function acquireWake(){
+  WLwant=true;
+  try{
+    if(!navigator.wakeLock||!S.active)return;
+    if(WL&&!WL.released)return;
+    navigator.wakeLock.request("screen").then(s=>{
+      WL=s;
+      /* The request is asynchronous, so the session can end while it is
+         still in flight. Without this the lock would arrive after the
+         release and hold the screen on for good. */
+      if(!WLwant)releaseWake();
+    },()=>{});
+  }catch(e){}
+}
+function releaseWake(){
+  WLwant=false;
+  try{if(WL){WL.release();WL=null;}}catch(e){}
+}
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="visible"&&S.active)acquireWake();
+});
+
 /* ============ REST TIMER ============ */
 let rT=null,rEnd=0;
+/* Sits just under the session header. Measured rather than hard-coded,
+   because the header's height moves with the safe area. */
+function restTop(){
+  const el=document.getElementById("rest"),t=document.querySelector(".top");
+  if(!el)return;
+  let b=84;
+  if(t){const r=t.getBoundingClientRect();if(r&&isFinite(r.bottom))b=r.bottom;}
+  el.style.top=Math.max(10,Math.round(b)+10)+"px";
+}
+window.addEventListener("resize",()=>{if(rT)restTop();});
+window.addEventListener("orientationchange",()=>{setTimeout(()=>{if(rT)restTop();},250);});
 function startRest(){
   rEnd=Date.now()+S.rest*1000;
   document.getElementById("rest").classList.add("show");
+  restTop();
   clearInterval(rT);rT=setInterval(tickRest,200);tickRest();
 }
 function tickRest(){
@@ -810,7 +928,72 @@ function openSheet(id){
 function openBackup(){
   document.getElementById("backupBox").value=JSON.stringify(S);
   document.getElementById("copyBtn").textContent="Copy";
+  document.getElementById("saveBtn").textContent="Save as file";
   openSheet("sheetBackup");
+}
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function bkName(){
+  const d=new Date(),p=n=>String(n).padStart(2,"0");
+  return "Lift_Backup_"+d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+".md";
+}
+function bkText(){
+  const d=new Date();
+  return "# Lift Backup\n#sports #gym\n\nBackup Date: "+d.getDate()+" "+MON[d.getMonth()]+
+    " "+d.getFullYear()+"\n\n"+JSON.stringify(S)+"\n";
+}
+/* Hands the file to the iOS share sheet, where Save to Files lets you pick
+   the folder. Markdown is offered first and plain text second, because the
+   share sheet is picky about types on some versions. */
+function shareBackup(){
+  const name=bkName(),txt=bkText(),btn=document.getElementById("saveBtn");
+  const types=["text/markdown","text/plain"];
+  const attempt=n=>{
+    if(n>=types.length)return dlBackup(name,txt,btn);
+    let f;
+    try{f=new File([txt],name,{type:types[n]});}catch(e){return dlBackup(name,txt,btn);}
+    if(!(navigator.canShare&&navigator.canShare({files:[f]})))return attempt(n+1);
+    navigator.share({files:[f],title:name})
+      .then(()=>{btn.textContent="Saved";})
+      .catch(e=>{if(e&&e.name==="AbortError")return;attempt(n+1);});
+  };
+  attempt(0);
+}
+function dlBackup(name,txt,btn){
+  try{
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([txt],{type:"text/plain"}));
+    a.download=name;document.body.appendChild(a);a.click();
+    setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1500);
+    if(btn)btn.textContent="Saved";
+  }catch(e){alert("Couldn't save a file from here. Use Copy instead.");}
+}
+/* Accepts the raw text the Copy button gives you, or a whole markdown file
+   with the JSON sitting inside it. If a file holds several exports stacked
+   up, the last one wins, on the basis that it is the newest. */
+function parseBackup(t){
+  t=String(t||"").trim();
+  const ok=d=>d&&typeof d==="object"&&!Array.isArray(d)&&("last" in d)&&("hist" in d);
+  try{const d=JSON.parse(t);if(ok(d))return d;}catch(e){}
+  let best=null;
+  t.split(/\r?\n/).forEach(line=>{
+    const l=line.trim().replace(/^```(json)?\s*/,"").replace(/\s*```$/,"").trim();
+    if(l.charAt(0)!=="{")return;
+    try{const d=JSON.parse(l);if(ok(d))best=d;}catch(e){}
+  });
+  if(best)return best;
+  let depth=0,start=-1;
+  for(let i=0;i<t.length;i++){
+    const c=t.charAt(i);
+    if(c==="{"){if(depth===0)start=i;depth++;}
+    else if(c==="}"){
+      if(depth>0)depth--;
+      if(depth===0&&start>=0){
+        try{const d=JSON.parse(t.slice(start,i+1));if(ok(d))best=d;}catch(e){}
+        start=-1;
+      }
+    }
+  }
+  return best;
 }
 function copyBackup(){
   const b=document.getElementById("backupBox");
@@ -820,18 +1003,16 @@ function copyBackup(){
   else {document.execCommand("copy");ok();}
 }
 function doImport(){
-  const t=prompt("Paste your backup text here. This replaces everything currently stored.");
+  const t=prompt("Paste your backup here. Either the copied text or a whole backup file works. This replaces everything currently stored.");
   if(!t)return;
-  try{
-    const d=JSON.parse(t);
-    if(!d||typeof d!=="object"||!("last" in d)) throw 0;
-    S=Object.assign({last:{},hist:[],active:null,rest:90,order:{},custom:{},hidden:{},extra:{},pending:null},d);
-    migrate();
-    save();closeSheets();home();
-    alert("Restored. "+(S.hist?S.hist.length:0)+" sessions loaded.");
-  }catch(e){alert("That didn't look like a backup. Check you copied the whole thing.");}
+  const d=parseBackup(t);
+  if(!d){alert("That didn't look like a backup. Check you pasted the whole thing.");return;}
+  S=Object.assign({last:{},hist:[],active:null,rest:90,order:{},custom:{},hidden:{},extra:{},pending:null},d);
+  migrate();
+  save();closeSheets();home();
+  alert("Restored. "+(S.hist?S.hist.length:0)+" sessions loaded.");
 }
-let CUE_N="",CUE_I=-1,ADD=false;
+let CUE_N="",CUE_I=null,ADD=false;
 function skipToday(){
   const A=S.active;if(!A.skip)A.skip=[];
   if(A.skip.indexOf(CUE_I)<0)A.skip.push(CUE_I);
@@ -841,6 +1022,7 @@ function unskip(i){
   const A=S.active;A.skip=(A.skip||[]).filter(x=>x!==i);save();session();
 }
 function openEdit(){
+  if(CUE_I===CD_I)return;
   ADD=false;
   const e=allEx(S.active.p)[CUE_I];
   document.getElementById("edTitle").textContent="Edit exercise";
@@ -888,21 +1070,48 @@ function saveEdit(){
   save();closeSheets();session();
 }
 function removeEx(){
-  if(!confirm("Remove this from Plan "+S.active.p+"? You can put it back with Reset order.")) return;
+  if(CUE_I===CD_I)return;
+  if(!confirm("Remove this from Plan "+S.active.p+"?\n\nYou can bring it back with Undo all changes, on the Reorder screen.")) return;
   const k=S.active.p;
   if(!S.hidden)S.hidden={};
   if(!S.hidden[k])S.hidden[k]=[];
   if(S.hidden[k].indexOf(CUE_I)<0)S.hidden[k].push(CUE_I);
   save();closeSheets();session();
 }
+/* The same movement in another plan is tracked separately now, so this is
+   the quickest way to see what you lifted for it elsewhere without leaving
+   the session you are in. */
+function otherPlans(name,cur){
+  const out=[];
+  for(const k in PLANS){
+    if(k===cur)continue;
+    const m=allEx(k).find(e=>e.n===name);
+    if(!m)continue;
+    const pv=S.last[lk(k,name)];
+    out.push(`<div class="or"><b>${k}</b>${pv
+      ? esc(pv.sets.map(s=>s.w+"kg x "+s.r).join(", "))
+      : "not logged yet &middot; starts at "+m.w+"kg"}</div>`);
+  }
+  return out.length
+    ? `<div class="oth"><div class="ol">In other plans</div>${out.join("")}</div>`
+    : "";
+}
 function openCue(i){
-  const e=allEx(S.active.p)[i];CUE_N=e.n;CUE_I=i;
-  document.getElementById("cueName").textContent=e.n;
-  document.getElementById("cueMeta").textContent=e.sets+" sets of "+e.reps+", "+e.u;
-  const c=CUES[e.n];
+  const cd=(i===CD_I);
+  const e=cd?null:allEx(S.active.p)[i];
+  CUE_N=cd?"Incline treadmill walk":e.n;CUE_I=i;
+  const n=cd?getCd().length:0;
+  document.getElementById("cueName").textContent=cd?"Cardio":e.n;
+  document.getElementById("cueMeta").textContent=cd
+    ? n+(n===1?" set":" sets")+", treadmill"
+    : e.sets+" sets of "+e.reps+", "+e.u;
+  const c=CUES[cd?"Cardio":e.n];
   document.getElementById("cueList").innerHTML = c
     ? c.map(x=>"<li>"+esc(x)+"</li>").join("")
     : '<li>No cues written for this one yet. Tap below for a video.</li>';
+  document.getElementById("cueOther").innerHTML = cd?"":otherPlans(e.n,S.active.p);
+  document.getElementById("cueDemo").style.display = cd?"none":"";
+  document.getElementById("cueEditRow").style.display = cd?"none":"";
   openSheet("sheetCue");
 }
 function watchDemo(){
