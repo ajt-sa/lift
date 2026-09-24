@@ -177,6 +177,9 @@
   .fgrp input{width:100%;background:var(--ink);color:var(--text);border:1px solid var(--line);
     border-radius:9px;padding:11px 12px;font-size:16px;font-family:inherit}
   .del{color:#D9694F}
+  .hrow .hsb{text-align:right;font-size:14px;color:var(--faint);flex:1}
+  .hrow .hw{display:block;font-size:12px;color:var(--dim);margin-top:2px}
+  .hrow .hw.add{color:var(--brass);opacity:.75}
   .hrow .hx{color:var(--faint);font-size:20px;padding:0 4px 0 10px;flex:none;line-height:1}
   .ro .rb[onclick^="unskip"]{width:auto;padding:0 14px;font-size:14px;color:var(--brass)}
   .ro{display:flex;align-items:center;gap:9px;background:var(--surface);
@@ -245,10 +248,35 @@
     onclick="removeEx()">Remove from this plan</button></div>
 </div>
 
+<div class="sheet" id="sheetWatch">
+  <h2 id="wTitle">Numbers from your watch</h2>
+  <p>Pull them from Health, or type them in. Minutes are filled in automatically.</p>
+  <div class="cdrow">
+    <div class="fgrp" style="flex:1"><label>minutes</label>
+      <input id="wMin" type="number" inputmode="numeric"></div>
+    <div class="fgrp" style="flex:1"><label>active kcal</label>
+      <input id="wKcal" type="number" inputmode="numeric"></div>
+  </div>
+  <div class="cdrow">
+    <div class="fgrp" style="flex:1"><label>avg bpm</label>
+      <input id="wBpm" type="number" inputmode="numeric"></div>
+    <div class="fgrp" style="flex:1"><label>HR recovery</label>
+      <input id="wRec" type="number" inputmode="numeric"></div>
+  </div>
+  <div class="row"><button class="btn btn-s" style="flex:1" onclick="fromHealth()">
+    Pull from Apple Health</button></div>
+  <div class="row">
+    <button class="btn btn-p" style="flex:1" onclick="saveWatch()">Save</button>
+    <button class="btn btn-s" onclick="skipWatch()">Skip</button>
+  </div>
+</div>
+
 <div class="sheet" id="sheetHist">
   <h2>History</h2>
-  <p>Every session you've finished.</p>
+  <p>Tap a row to add or edit its watch numbers.</p>
   <div class="hist" id="histList"></div>
+  <div class="row"><button class="btn btn-p" style="flex:1" id="revBtn"
+    onclick="copyReview()">Copy for coach review</button></div>
 </div>
 
 <script>
@@ -312,7 +340,7 @@ E:{t:"Full Body",s:"light and high rep",
 
 /* ============ STATE ============ */
 const KEY="lift.v1";
-let S={last:{},hist:[],active:null,rest:90,order:{},custom:{},hidden:{},extra:{}};
+let S={last:{},hist:[],active:null,rest:90,order:{},custom:{},hidden:{},extra:{},pending:null};
 let RO=false;
 try{const r=localStorage.getItem(KEY);if(r)S=Object.assign(S,JSON.parse(r));}catch(e){}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){
@@ -328,10 +356,14 @@ function vis(k){
   return ord(k).filter(i=>h.indexOf(i)<0);
 }
 function cdKey(k){return "Cardio ("+k+")";}
+/* Saved weights are keyed by plan AND exercise name, so the same movement in
+   two plans keeps its own history. "A|M - Chest Press" is a different slot
+   from "E|M - Chest Press". */
+function lk(p,n){return p+"|"+n;}
 function getCd(){
   const A=S.active,def=PLANS[A.p].cardio;
   if(!Array.isArray(A.cd)){
-    const pv=S.last[cdKey(A.p)];
+    const pv=S.last[lk(A.p,cdKey(A.p))];
     A.cd=def.map((c,i)=>({d:pv&&pv.sets[i]?pv.sets[i].d:c.d,
       inc:pv&&pv.sets[i]?pv.sets[i].inc:c.inc,
       sp:pv&&pv.sets[i]?pv.sets[i].sp:c.sp,on:false}));
@@ -360,7 +392,7 @@ function getSt(i){
   const A=S.active,e=allEx(A.p)[i];
   if(!e)return null;
   if(!A.ex[i]){
-    const pv=S.last[e.n];
+    const pv=S.last[lk(A.p,e.n)];
     A.ex[i]={sets:Array.from({length:e.sets},(_,j)=>({
       w:pv&&pv.sets[j]?pv.sets[j].w:e.w,
       r:pv&&pv.sets[j]?pv.sets[j].r:parseInt(e.reps)||10,on:false}))};
@@ -382,8 +414,17 @@ function reorderDone(){RO=false;save();session();}
 function rebuildLast(){
   S.last={};
   S.hist.slice().sort((a,b)=>a.ts-b.ts).forEach(r=>{
-    (r.ex||[]).forEach(x=>{S.last[x.n]={sets:x.sets,ts:r.ts};});
+    (r.ex||[]).forEach(x=>{S.last[lk(r.p,x.n)]={sets:x.sets,ts:r.ts};});
   });
+}
+/* One-time upgrade from the old name-only weight lookup. The old table is
+   parked under lastV1 rather than deleted, and the new one is rebuilt from
+   history, which has always stored the plan letter on every session. */
+function migrate(){
+  if(S.v===2)return;
+  if(S.last&&Object.keys(S.last).length)S.lastV1=S.last;
+  rebuildLast();
+  S.v=2;save();
 }
 function move(i,d){
   const k=S.active.p,o=ord(k).slice(),pos=o.indexOf(i),np=pos+d;
@@ -534,7 +575,7 @@ function session(){
         <button class="rb" onclick="unskip(${i})">undo</button></div></div>`;
       return;
     }
-    const st=getSt(i),all=st.sets.every(s=>s.on),prev=S.last[e.n];
+    const st=getSt(i),all=st.sets.every(s=>s.on),prev=S.last[lk(k,e.n)];
     h+=`<div class="ex${all?" done":""}">
       <button class="exh" onclick="openCue(${i})">
         <div><div class="exn">${esc(e.n)}</div>
@@ -559,7 +600,7 @@ function session(){
     h+=`</div></div>`;
   });
 
-  const CD=getCd(),cAll=CD.every(c=>c.on),cPrev=S.last[cdKey(k)];
+  const CD=getCd(),cAll=CD.every(c=>c.on),cPrev=S.last[lk(k,cdKey(k))];
   h+=`<div class="ex${cAll?" done":""}"><div class="exn">Cardio</div>
     <div class="exm">${CD.length} ${CD.length>1?"sets":"set"}, treadmill</div>`;
   if(cPrev)h+=`<div class="prev">Last time <b>${cPrev.sets.map(c=>
@@ -626,21 +667,120 @@ function finish(){
     if(!A.ex[i])return;
     const done=A.ex[i].sets.filter(s=>s.on).map(s=>({w:s.w,r:s.r}));
     if(done.length){
-      S.last[e.n]={sets:done,ts:Date.now()};
+      S.last[lk(A.p,e.n)]={sets:done,ts:Date.now()};
       rec.ex.push({n:e.n,sets:done});rec.sets+=done.length;
     }
   });
   const cd=getCd().filter(c=>c.on).map(c=>({d:c.d,inc:c.inc,sp:c.sp}));
   if(cd.length){
-    S.last[cdKey(A.p)]={sets:cd,ts:Date.now()};
+    S.last[lk(A.p,cdKey(A.p))]={sets:cd,ts:Date.now()};
     rec.ex.push({n:cdKey(A.p),sets:cd});
   }
   rec.cardio=cd.length;
   if(!rec.sets&&!cd.length){alert("Nothing ticked off yet. Tick at least one set first.");return;}
-  S.hist.push(rec);S.active=null;save();stopRest();
-  home();
+  rec.watch={min:Math.max(1,Math.round((rec.ts-A.ts)/60000)),kcal:null,bpm:null,rec:null};
+  PEND=rec;WEDIT=null;S.pending=rec;save();
+  document.getElementById("wTitle").textContent="Numbers from your watch";
+  document.getElementById("wMin").value=rec.watch.min;
+  ["wKcal","wBpm","wRec"].forEach(id=>document.getElementById(id).value="");
+  openSheet("sheetWatch");
+}
+
+let PEND=null,WEDIT=null;
+const SC_NAME="Lift Health";
+function fromHealth(){
+  if(PEND){S.pending=PEND;save();}
+  location.href="shortcuts://run-shortcut?name="+encodeURIComponent(SC_NAME);
+}
+function readParams(){
+  let q;
+  try{q=new URLSearchParams(location.search);}catch(e){return false;}
+  const g=k=>{const v=parseInt(q.get(k));return isNaN(v)?null:v;};
+  const kcal=g("kcal"),bpm=g("bpm"),rec=g("rec"),min=g("min");
+  if(kcal===null&&bpm===null&&rec===null&&min===null)return false;
+  try{history.replaceState(null,"",location.pathname);}catch(e){}
+  if(!S.pending)return false;
+  PEND=S.pending;WEDIT=null;
+  const w=PEND.watch||{};
+  document.getElementById("wTitle").textContent="From Apple Health";
+  document.getElementById("wMin").value=(min!==null?min:w.min)||"";
+  document.getElementById("wKcal").value=kcal!==null?kcal:"";
+  document.getElementById("wBpm").value=bpm!==null?bpm:"";
+  document.getElementById("wRec").value=rec!==null?rec:"";
+  openSheet("sheetWatch");
+  return true;
+}
+function readWatch(){
+  const g=id=>{const v=parseInt(document.getElementById(id).value);return isNaN(v)?null:v;};
+  const w={min:g("wMin"),kcal:g("wKcal"),bpm:g("wBpm"),rec:g("wRec")};
+  return (w.min||w.kcal||w.bpm||w.rec)?w:null;
+}
+function saveWatch(){
+  const w=readWatch();
+  if(WEDIT!==null){
+    const r=S.hist.filter(x=>x.ts===WEDIT)[0];
+    if(r)r.watch=w;
+    save();closeSheets();openHist();return;
+  }
+  PEND.watch=w;commitSession();
+}
+function skipWatch(){
+  if(WEDIT!==null){closeSheets();openHist();return;}
+  commitSession();
+}
+function commitSession(){
+  const rec=PEND;PEND=null;S.pending=null;
+  S.hist.push(rec);S.active=null;save();stopRest();closeSheets();home();
   setTimeout(()=>alert("Saved. "+rec.sets+" sets logged.\nNext time you open Plan "+rec.p+
     ", these weights will already be filled in."),60);
+}
+function editWatch(ts){
+  const r=S.hist.filter(x=>x.ts===ts)[0];if(!r)return;
+  WEDIT=ts;PEND=null;
+  const d=new Date(ts);
+  document.getElementById("wTitle").textContent="Plan "+r.p+", "+d.getDate()+" "+
+    ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()];
+  const w=r.watch||{};
+  document.getElementById("wMin").value=w.min||"";
+  document.getElementById("wKcal").value=w.kcal||"";
+  document.getElementById("wBpm").value=w.bpm||"";
+  document.getElementById("wRec").value=w.rec||"";
+  closeSheets();openSheet("sheetWatch");
+}
+function copyReview(){
+  const MN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  let t="LIFT — session log for coach review\n";
+  t+="Generated "+new Date().toDateString()+"\n";
+  t+="Goal: fat loss 84 to 75 kg, build arms and shoulders. 5-day split A-E.\n";
+  const rows=S.hist.slice().sort((a,b)=>b.ts-a.ts).slice(0,10);
+  if(!rows.length)return alert("No finished sessions yet.");
+  rows.forEach(r=>{
+    const d=new Date(r.ts);
+    t+="\n--- "+d.getDate()+" "+MN[d.getMonth()]+", Plan "+r.p+
+       " ("+(PLANS[r.p]?PLANS[r.p].t:"")+") ---\n";
+    const w=r.watch;
+    if(w)t+="Watch: "+[w.min?w.min+" min":null,w.kcal?w.kcal+" kcal":null,
+      w.bpm?w.bpm+" avg bpm":null,w.rec?"HR recovery "+w.rec:null]
+      .filter(Boolean).join(", ")+"\n";
+    (r.ex||[]).forEach(x=>{
+      if(x.n.indexOf("Cardio")===0){
+        t+="Cardio: "+x.sets.map(c=>c.d.toFixed(2)+"km at "+c.inc+"% at "+c.sp).join(" | ")+"\n";
+      }else{
+        t+=x.n+": "+x.sets.map(v=>v.w+"kg x "+v.r).join(", ")+"\n";
+      }
+    });
+  });
+  t+="\nPlease review as a strength coach: patterns, what to progress, what to hold, "+
+     "any imbalance, and what to watch on the Apple Watch.\n";
+  const ta=document.createElement("textarea");
+  ta.value=t;ta.style.position="fixed";ta.style.opacity="0";
+  document.body.appendChild(ta);ta.select();ta.setSelectionRange(0,999999);
+  let ok=false;
+  try{ok=document.execCommand("copy");}catch(e){}
+  document.body.removeChild(ta);
+  if(navigator.clipboard)navigator.clipboard.writeText(t).catch(()=>{});
+  document.getElementById("revBtn").textContent=
+    (ok||navigator.clipboard)?"Copied, now paste into Claude":"Copy failed, try again";
 }
 
 /* ============ REST TIMER ============ */
@@ -685,7 +825,8 @@ function doImport(){
   try{
     const d=JSON.parse(t);
     if(!d||typeof d!=="object"||!("last" in d)) throw 0;
-    S=Object.assign({last:{},hist:[],active:null,rest:90,order:{},custom:{},hidden:{},extra:{}},d);
+    S=Object.assign({last:{},hist:[],active:null,rest:90,order:{},custom:{},hidden:{},extra:{},pending:null},d);
+    migrate();
     save();closeSheets();home();
     alert("Restored. "+(S.hist?S.hist.length:0)+" sessions loaded.");
   }catch(e){alert("That didn't look like a backup. Check you copied the whole thing.");}
@@ -769,14 +910,20 @@ function watchDemo(){
     encodeURIComponent(CUE_N.replace(/^(DB|M|C) - /,"")+" proper form technique"),"_blank");
 }
 function openHist(){
+  const rb=document.getElementById("revBtn");if(rb)rb.textContent="Copy for coach review";
   const el=document.getElementById("histList");
   if(!S.hist.length){el.innerHTML='<div class="empty">No finished sessions yet.</div>';}
   else{
     el.innerHTML=S.hist.slice().reverse().slice(0,60).map(r=>{
       const d=new Date(r.ts);
+      const w=r.watch,ws=w?[w.min?w.min+"min":null,w.kcal?w.kcal+"kcal":null,
+        w.bpm?w.bpm+"bpm":null].filter(Boolean).join(" · "):"";
       return `<div class="hrow"><div class="hd">${d.getDate()} ${
         ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]}</div>
-        <div class="hp">${r.p}</div><div class="hs">${r.sets} sets${r.cardio?", "+r.cardio+" cardio":""}</div>
+        <div class="hp">${r.p}</div>
+        <button class="hs hsb" onclick="editWatch(${r.ts})">${r.sets} sets${
+          r.cardio?", "+r.cardio+" cardio":""}${ws?`<span class="hw">${ws}</span>`:
+          `<span class="hw add">add watch numbers</span>`}</button>
         <button class="hx" onclick="delHist(${r.ts})" aria-label="delete">&times;</button></div>`;
     }).join("");
   }
@@ -789,7 +936,16 @@ function delHist(ts){
 }
 
 /* ============ BOOT ============ */
+migrate();
 if(S.active&&PLANS[S.active.p]) session(); else home();
+if(!readParams()&&S.pending&&!S.active){
+  PEND=S.pending;
+  const w=PEND.watch||{};
+  document.getElementById("wTitle").textContent="Finish saving your last session";
+  document.getElementById("wMin").value=w.min||"";
+  ["wKcal","wBpm","wRec"].forEach(id=>document.getElementById(id).value="");
+  openSheet("sheetWatch");
+}
 window.addEventListener("beforeunload",save);
 </script>
 </body>
