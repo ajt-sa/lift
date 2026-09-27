@@ -156,6 +156,15 @@
   .rest .rt{font-size:21px;font-weight:700;width:58px;color:var(--brass)}
   .rest .rl{flex:1;font-size:13px;color:var(--dim)}
   .rest .rx{color:var(--dim);font-size:14px;padding:6px 10px}
+  .rest .rp{color:var(--brass);font-size:14px;font-weight:700;padding:6px 10px;
+    border:1px solid var(--brass);border-radius:8px;background:transparent}
+  /* Rest is over. No sound and no vibration on iOS, so this has to carry the
+     whole signal on its own — filled brass, readable from the machine. */
+  .rest.done{background:var(--brass);border-color:var(--brass)}
+  .rest.done .rt{color:var(--ink)}
+  .rest.done .rl{color:var(--ink);font-weight:700}
+  .rest.done .rx{color:rgba(18,22,28,.7)}
+  .rest.done .rp{color:var(--ink);border-color:rgba(18,22,28,.45)}
 
   /* ---------- sheets ---------- */
   .veil{position:fixed;inset:0;background:rgba(8,10,14,.72);z-index:40;display:none}
@@ -223,8 +232,9 @@
 
 <div class="rest" id="rest">
   <div class="rt" id="restT">1:30</div>
-  <div class="rl">Rest. Let your heart rate come down.</div>
-  <button class="rx" onclick="stopRest()">Skip</button>
+  <div class="rl" id="restL">Rest</div>
+  <button class="rp" onclick="addRest(30)">+30s</button>
+  <button class="rx" id="restX" onclick="stopRest()">Skip</button>
 </div>
 
 <div class="veil" id="veil" onclick="closeSheets()"></div>
@@ -443,6 +453,15 @@ function rebuildLast(){
 /* One-time upgrade from the old name-only weight lookup. The old table is
    parked under lastV1 rather than deleted, and the new one is rebuilt from
    history, which has always stored the plan letter on every session. */
+/* A malformed row in the history would throw on every boot and lock you out
+   of your own data with no way back in. Anything that is not a well-formed
+   session is dropped on load instead of trusted. */
+function sanitize(){
+  if(!Array.isArray(S.hist))S.hist=[];
+  const n=S.hist.length;
+  S.hist=S.hist.filter(r=>r&&typeof r==="object"&&typeof r.ts==="number"&&typeof r.p==="string");
+  if(S.hist.length!==n)save();
+}
 function migrate(){
   if(S.v===2)return;
   if(S.last&&Object.keys(S.last).length)S.lastV1=S.last;
@@ -574,7 +593,7 @@ function rolling7(){
 
 /* ============ HOME ============ */
 function home(){
-  RO=false;releaseWake();save();
+  RO=false;releaseWake();hideRestBar();save();
   const act=(S.active&&PLANS[S.active.p])?S.active.p:null;
   const r7=rolling7();
   let h=`<div class="home-head"><h1>Lift</h1><p>Pick today's session.</p></div>
@@ -669,7 +688,7 @@ function session(){
       <button class="rb" onclick="unskip(${CD_I})">undo</button></div></div>`;
     h+=cdTail(left);
     document.getElementById("app").innerHTML=h;
-    if(rT)restTop();
+    if(restActive())showRest();
     acquireWake();return;
   }
   const CD=getCd(),cAll=CD.every(c=>c.on),cPrev=S.last[lk(k,cdKey(k))];
@@ -706,7 +725,7 @@ function session(){
   h+=`</div></div>`;
   h+=cdTail(left);
   document.getElementById("app").innerHTML=h;
-  if(rT)restTop();
+  if(restActive())showRest();
   acquireWake();
 }
 function cdTail(left){
@@ -809,6 +828,7 @@ function skipWatch(){
 }
 function commitSession(){
   const rec=PEND;PEND=null;S.pending=null;
+  if(!rec||typeof rec.ts!=="number"){S.active=null;save();stopRest();closeSheets();home();return;}
   S.hist.push(rec);S.active=null;save();stopRest();closeSheets();home();
   setTimeout(()=>alert("Saved. "+rec.sets+" sets logged.\nNext time you open Plan "+rec.p+
     ", these weights will already be filled in."),60);
@@ -890,7 +910,7 @@ document.addEventListener("visibilitychange",()=>{
 });
 
 /* ============ REST TIMER ============ */
-let rT=null,rEnd=0;
+let rT=null,rEnd=0,rDone=false;
 /* Sits just under the session header. Measured rather than hard-coded,
    because the header's height moves with the safe area. */
 function restTop(){
@@ -900,21 +920,53 @@ function restTop(){
   if(t){const r=t.getBoundingClientRect();if(r&&isFinite(r.bottom))b=r.bottom;}
   el.style.top=Math.max(10,Math.round(b)+10)+"px";
 }
-window.addEventListener("resize",()=>{if(rT)restTop();});
-window.addEventListener("orientationchange",()=>{setTimeout(()=>{if(rT)restTop();},250);});
+window.addEventListener("resize",()=>{if(restActive())restTop();});
+window.addEventListener("orientationchange",()=>{setTimeout(()=>{if(restActive())restTop();},250);});
+/* The bar is on screen whenever a rest is counting down OR has just finished
+   and is waiting to be acknowledged. */
+function restActive(){return rT!==null||rDone;}
+function showRest(){document.getElementById("rest").classList.add("show");restTop();}
+/* Hides the bar without touching the countdown, for the trip out to the plan
+   list and back. */
+function hideRestBar(){document.getElementById("rest").classList.remove("show");}
+function runRest(){
+  rDone=false;
+  const el=document.getElementById("rest");
+  el.classList.remove("done");
+  document.getElementById("restL").textContent="Rest";
+  document.getElementById("restX").textContent="Skip";
+  showRest();
+  clearInterval(rT);rT=setInterval(tickRest,200);tickRest();
+}
 function startRest(){
   rEnd=Date.now()+S.rest*1000;
-  document.getElementById("rest").classList.add("show");
-  restTop();
-  clearInterval(rT);rT=setInterval(tickRest,200);tickRest();
+  runRest();
+}
+/* Adds time to a running rest, or starts a fresh one from now if the timer
+   has already run out — which is the moment you most want it. */
+function addRest(sec){
+  rEnd=(rDone||rT===null)?Date.now()+sec*1000:rEnd+sec*1000;
+  runRest();
 }
 function tickRest(){
   const ms=rEnd-Date.now();
-  if(ms<=0){stopRest();if(navigator.vibrate)navigator.vibrate([90,60,90]);return;}
+  if(ms<=0){
+    clearInterval(rT);rT=null;rDone=true;
+    document.getElementById("rest").classList.add("done");
+    document.getElementById("restT").textContent="0:00";
+    document.getElementById("restL").textContent="Rest done";
+    document.getElementById("restX").textContent="Dismiss";
+    if(navigator.vibrate)navigator.vibrate([90,60,90]);
+    return;
+  }
   const t=Math.ceil(ms/1000);
   document.getElementById("restT").textContent=Math.floor(t/60)+":"+String(t%60).padStart(2,"0");
 }
-function stopRest(){clearInterval(rT);document.getElementById("rest").classList.remove("show");}
+function stopRest(){
+  clearInterval(rT);rT=null;rDone=false;
+  const el=document.getElementById("rest");
+  el.classList.remove("show","done");
+}
 
 /* ============ SHEETS ============ */
 function closeSheets(){
@@ -1008,7 +1060,7 @@ function doImport(){
   const d=parseBackup(t);
   if(!d){alert("That didn't look like a backup. Check you pasted the whole thing.");return;}
   S=Object.assign({last:{},hist:[],active:null,rest:90,order:{},custom:{},hidden:{},extra:{},pending:null},d);
-  migrate();
+  sanitize();migrate();
   save();closeSheets();home();
   alert("Restored. "+(S.hist?S.hist.length:0)+" sessions loaded.");
 }
@@ -1145,7 +1197,7 @@ function delHist(ts){
 }
 
 /* ============ BOOT ============ */
-migrate();
+sanitize();migrate();
 if(S.active&&PLANS[S.active.p]) session(); else home();
 if(!readParams()&&S.pending&&!S.active){
   PEND=S.pending;
